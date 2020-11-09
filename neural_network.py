@@ -30,10 +30,11 @@ class NeuralNetwork:
         self.num_hidden = num_hidden
         self.num_outputs = num_outputs
         self.bias = bias
-        self.links = None  # Set later by structure
-        self.nodes = None  # Set later by structure
+        self.links = []  # Set later by structure
+        self.neurons = []  # Set later by structure
 
-        # call structure
+        # call structure to populate neurons and create links
+        self.__structure()
 
     # Public
     def train(self, data, labels, epochs, rate=0.1):
@@ -64,48 +65,87 @@ class NeuralNetwork:
         raise NotImplementedError
 
     # Private
-    def structure(self):
+    def __structure(self):
         """
         Defines structure
 
         does just that really...
         """
 
-        raise NotImplementedError
+        # Populate neurons
+
+        # For each num inputs add a new neuron on layer 0 (input layer)
+        for i in range(self.num_inputs):
+            self.neurons.append(Neuron(0, self.bias))
+
+        # For each num hidden neurons add a new neuron on layer 1 (hidden layer)
+        for i in range(self.num_hidden):
+            self.neurons.append(Neuron(1, self.bias))
+
+        # For each num output neurons add a new neuron on layer 3 (output layer)
+        for i in range(self.num_outputs):
+            self.neurons.append(Neuron(2, self.bias))
+
+        # Populate links
+
+        # For each neuron:
+        # Check if it has next layer
+        # If so, add link with input as the neuron itself and output all neurons from the next layer
+
+        for i, neuron_in in enumerate(self.neurons):
+            # Check if it has next layer
+            if neuron_in.layer == 2:
+                break
+            # If so, add links with this neuron's as input,
+            # for each of the next layer's node as output.
+            for j, neuron_out in enumerate(self.neurons):
+                if neuron_out.id == neuron_in.id:
+                    continue
+
+                if neuron_in.layer + 1 != neuron_out.layer:
+                    continue
+
+                # Append new link to links list
+                link = Link(neuron_in.id, neuron_out.id)
+                self.links.append(link)
+
+                # Add link id to input neuron's output links
+                self.neurons[i].output_links.append(link.id)
+
+                # Add link id to output neuron's input links
+                self.neurons[j].input_links.append(link.id)
 
 
 class Neuron:
 
     count = 0
 
-    def __init__(self, layer, bias, input_links, output_links):
+    def __init__(self, layer, bias):
         """
 
         :param layer: The layer the neuron belongs to
         :param bias: Neuron's bias
-        :param input_links: A list with IDs of all input links
-        :param output_links: A list with IDs of all output links links
         """
 
         self.id = self.count
         self.layer = layer
         self.bias = bias
-        self.input_links = input_links
-        self.output_links = output_links
+        self.input_links = []  # List of all links which go in the neuron
+        self.output_links = []  # List of all links which go out of the neuron
 
         # Increment object count
         self.count += 1
 
     def output(self):
         """
-        Calculates node's output
+        Calculates neurons's output
         (passes bias / weights / values through activation and gets output)
         """
 
         raise NotImplementedError
 
 
-class Links:
+class Link:
 
     count = 0
 
