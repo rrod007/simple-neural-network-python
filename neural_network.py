@@ -4,6 +4,7 @@ An input layer, a hidden layer, and an output layer.
 """
 import random
 import math
+import copy
 
 
 class NeuralNetwork:
@@ -32,24 +33,123 @@ class NeuralNetwork:
         self.bias = bias
         self.links = []  # Set later by structure
         self.neurons = []  # Set later by structure
+        self.data = None
+        self.labels = None
+        self.training_sample = None  # Training sample for current training iteration
+        self.activation = getattr(Activation(), activation)
 
         # call structure to populate neurons and create links
         self.__structure()
 
     # Public
-    def train(self, data, labels, epochs, rate=0.1):
+    def data_input(self, data, labels=None):
         """
-        trains NN
+        Sets data for training the NN or making predictions.
+
 
         :param data: list of lists, each of these represents a row of a csv file with
         numerical training data. All should be the same size.
-        :param labels: List of labels, should represent each label for each training row.
-        They must be in order so they match their training rows.
+        :param (optional, set to None by default) labels: List of lists.
+        Each should represent the expected values for the output neurons, from the top to the bottom
+        All must be ordered so that they match their training rows.
+        """
+        # Do checks on inputs
+
+        self.data = data
+        self.labels = labels
+
+    def train(self, epochs, rate=0.1):
+        """
+        trains NN
         :param epochs: Number of epochs to train the NN for.
         :param rate: Learning rate, 0.1 by default.
         """
 
-        raise NotImplementedError
+        # Do checks if labels are set.
+        if self.labels is None:
+            raise Exception("Labels parameter is not set. Re-insert data with data_input")
+
+        # Get training samples together
+        training_set = []
+        for i in range(len(self.data)):
+            training_sample = [self.data[i], self.labels[i]]
+            training_set.append(training_sample)
+
+        # Update weights x amount of times,
+        # With x being the length of the training sample * num. of epochs
+        # Training samples are randomly extracted from the training set
+        for i in range(epochs * len(training_set)):
+            # Get a random training sample
+            self.training_sample = random.choice(training_set)
+
+            # Update weights on each output neuron's input links
+            label_count = 0
+            for neuron in self.neurons:
+                if neuron.layer != 2:
+                    continue
+
+                # Get current neuron's predicted output
+                output = self.output(neuron)
+
+                # Get current neuron's expected output
+                label = self.training_sample[1][label_count]
+                label_count += 1
+
+                # Set current neuron's error
+                neuron.error = (label - output) * self.__transfer_derivative(output)
+
+                # Find each input link object
+                for link in self.links:
+                    if link.id not in neuron.input_links:
+                        continue
+                    # Update link's weight:
+                    # Get output from the link's input neuron
+                    for hidden_neuron in self.neurons:
+                        if hidden_neuron.id != link.input_neuron:
+                            continue
+                        # Get input value for output neuron's input link
+                        link_input_value = self.output(hidden_neuron)
+                        link.weight = link.weight + rate * neuron.error * link_input_value
+
+            # Update weights on each hidden neuron's input links
+            for neuron in self.neurons:
+                if neuron.layer != 1:
+                    continue
+
+                # Increment the hidden neuron's error:
+                # Find each output neuron
+                for output_neuron in self.neurons:
+                    if output_neuron.layer != 2:
+                        continue
+                    output_derivative = self.__transfer_derivative(self.output(output_neuron))
+                    error = output_neuron.error
+
+                    # Get weight from link between hidden neuron and output neuron
+                    for link in self.links:
+                        if (link.id not in neuron.output_links) or (link.id not in output_neuron.input_links):
+                            continue
+                        weight = link.weight
+
+                        # Increment hidden neuron's error
+                        neuron.error += weight * error * output_derivative
+
+                # Update the hidden neuron's input links' weights
+                for link in self.links:
+                    if link.id not in neuron.input_links:
+                        continue
+                    # Get link's input value and then update weight
+                    for input_neuron in self.neurons:
+                        if input_neuron.id != link.input_neuron:
+                            continue
+                        link_input = self.output(input_neuron)
+                        # update weight
+                        link.weight = link.weight + rate * neuron.error * link_input
+
+            # Reset all neuron's errors for the next training iteration
+            for neuron in self.neurons:
+                neuron.error = 0
+
+        # raise NotImplementedError
 
     def predict(self, data):
         """
@@ -63,6 +163,51 @@ class NeuralNetwork:
         """
 
         raise NotImplementedError
+
+    def output(self, neuron):
+        """
+        Calculates neuron's output
+
+        :param neuron: Neuron object to get the output from
+
+        (passes bias / weights / values through activation and gets output)
+        """
+
+        weights = []
+        values = []
+
+        # Loop through all links
+        # If the link is in the neuron's input links list, then:
+        # 1. Get the link's weight, and right after
+        # 2. Get that link's input neuron's output.
+        # If this neuron doesn't have an input
+
+        # If neuron is in first layer, return corresponding training sample input
+        if neuron.layer == 0:
+            # neuron.id corresponds to training sample's list index
+            return self.training_sample[neuron.id]
+
+        for link in self.links:
+            # Move on if link is not in input links for the neuron
+            if link.id not in neuron.input_links:
+                continue
+
+            # Append link's weight
+            weights.append(link.weight)
+
+            # Go through NNs neurons and find the neuron who is the link's input
+            # Append that neuron's output to values
+            for neuron in self.neurons:
+                if neuron.id == link.input_neuron:
+                    values.append(self.output(neuron))
+
+        output = neuron.bias
+        for (weight, value) in zip(weights, values):
+            output += weight * value
+
+        return output
+
+        # raise NotImplementedError
 
     # Private
     def __structure(self):
@@ -90,7 +235,8 @@ class NeuralNetwork:
 
         # For each neuron:
         # Check if it has next layer
-        # If so, add link with input as the neuron itself and output all neurons from the next layer
+        # If so, add link with input as the neuron itself
+        # and output all neurons from the next layer
 
         for i, neuron_in in enumerate(self.neurons):
             # Check if it has next layer
@@ -115,6 +261,13 @@ class NeuralNetwork:
                 # Add link id to output neuron's input links
                 self.neurons[j].input_links.append(link.id)
 
+    @staticmethod
+    def __transfer_derivative(output):
+        """
+        Returns the transfer derivative for neuron's outputs
+        """
+        return output * (1.0 - output)
+
 
 class Neuron:
 
@@ -130,19 +283,12 @@ class Neuron:
         self.id = self.count
         self.layer = layer
         self.bias = bias
+        self.error = 0
         self.input_links = []  # List of all links which go in the neuron
         self.output_links = []  # List of all links which go out of the neuron
 
         # Increment object count
         self.count += 1
-
-    def output(self):
-        """
-        Calculates neurons's output
-        (passes bias / weights / values through activation and gets output)
-        """
-
-        raise NotImplementedError
 
 
 class Link:
