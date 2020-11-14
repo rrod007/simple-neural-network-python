@@ -35,7 +35,8 @@ class NeuralNetwork:
         self.neurons = []  # Set later by structure
         self.data = None
         self.labels = None
-        self.training_sample = None  # Training sample for current training iteration
+        self.training_input_sample = None  # Training sample for current training iteration
+        self.prediction_input_sample = None  # Prediction sample for current prediction iteration
         self.activation = getattr(Activation(), activation)
 
         # call structure to populate neurons and create links
@@ -45,15 +46,32 @@ class NeuralNetwork:
     def data_input(self, data, labels=None):
         """
         Sets data for training the NN or making predictions.
+        You must re-insert data before each training or prediction session
 
 
         :param data: list of lists, each of these represents a row of a csv file with
-        numerical training data. All should be the same size.
-        :param (optional, set to None by default) labels: List of lists.
+        numerical training data. All should be the same size. All values must be numerical
+        :param (set to None by default, do not set if you wish to predict) labels: List of lists.
         Each should represent the expected values for the output neurons, from the top to the bottom
-        All must be ordered so that they match their training rows.
+        All must be ordered so that they match their training rows. All values must be numerical
         """
         # Do checks on inputs
+
+        # All data and label rows should have the same size
+        for row in data:
+            if len(row) != len(data[0]):
+                raise Exception("All data rows must have the same number of values")
+
+        if labels is not None:
+            for label_sample in labels:
+                if len(label_sample) != len(labels[0]):
+                    raise Exception("All label rows must have the same number of values")
+
+        # Number of attributes in each data / label sample must match number of input / output neurons
+        if len(data[0]) != self.num_inputs:
+            raise Exception("Number of data attributes on each data row must match number of input neurons")
+        if len(labels[0]) != self.num_outputs:
+            raise Exception("Number of labels on each labels row must match number of output neurons")
 
         self.data = data
         self.labels = labels
@@ -80,7 +98,7 @@ class NeuralNetwork:
         # Training samples are randomly extracted from the training set
         for i in range(epochs * len(training_set)):
             # Get a random training sample
-            self.training_sample = random.choice(training_set)
+            self.training_input_sample = random.choice(training_set)
 
             # Update weights on each output neuron's input links
             label_count = 0
@@ -92,7 +110,7 @@ class NeuralNetwork:
                 output = self.output(neuron)
 
                 # Get current neuron's expected output
-                label = self.training_sample[1][label_count]
+                label = self.training_input_sample[1][label_count]
                 label_count += 1
 
                 # Set current neuron's error
@@ -149,20 +167,45 @@ class NeuralNetwork:
             for neuron in self.neurons:
                 neuron.error = 0
 
+        # Reset input data and data related to training after training session is complete
+        self.data = None
+        self.labels = None
+        self.training_input_sample = None
+
         # raise NotImplementedError
 
-    def predict(self, data):
+    def predict(self):
         """
         Makes prediction
 
-        :param data: list of lists, each of these represents a row of a csv file with
-        numerical data to make predictions on. All lists should be the same size.
-
-        :return List of predictions for each neuron.
+        :return List of lists of predictions for each output neuron.
         Ordered from the top to the bottom of the layer.
         """
 
-        raise NotImplementedError
+        # Check if self.labels not is set
+        if self.labels is not None:
+            Exception("Call the input function again and do *not* set the labels parameter")
+
+        prediction_output_samples = []
+
+        # Iterate through every row on the inserted data
+        for prediction_input_sample in self.data:
+            # Set current prediction sample
+            self.prediction_input_sample = prediction_input_sample
+
+            predictions = []
+            for output_neuron in self.neurons:
+                if output_neuron.layer != 2:
+                    continue
+                predictions.append(output_neuron)
+
+        self.data = None
+        self.labels = None
+        self.prediction_input_sample = None
+
+        return prediction_output_samples
+
+        # raise NotImplementedError
 
     def output(self, neuron):
         """
@@ -182,10 +225,14 @@ class NeuralNetwork:
         # 2. Get that link's input neuron's output.
         # If this neuron doesn't have an input
 
-        # If neuron is in first layer, return corresponding training sample input
+        # If neuron is in first layer, return corresponding training / prediction sample input
         if neuron.layer == 0:
+            if self.labels is None:
+                # neuron.id corresponds to prediction sample's list index
+                return self.prediction_input_sample[neuron.id]
+
             # neuron.id corresponds to training sample's list index
-            return self.training_sample[neuron.id]
+            return self.training_input_sample[neuron.id]
 
         for link in self.links:
             # Move on if link is not in input links for the neuron
