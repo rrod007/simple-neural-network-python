@@ -4,7 +4,6 @@ An input layer, a hidden layer, and an output layer.
 """
 import random
 import math
-import copy
 
 
 class NeuralNetwork:
@@ -70,11 +69,13 @@ class NeuralNetwork:
         # Number of attributes in each data / label sample must match number of input / output neurons
         if len(data[0]) != self.num_inputs:
             raise Exception("Number of data attributes on each data row must match number of input neurons")
-        if len(labels[0]) != self.num_outputs:
-            raise Exception("Number of labels on each labels row must match number of output neurons")
+        if labels is not None:
+            if len(labels[0]) != self.num_outputs:
+                raise Exception("Number of labels on each labels row must match number of output neurons")
 
         self.data = data
-        self.labels = labels
+        if labels is not None:
+            self.labels = labels
 
     def train(self, epochs, rate=0.1):
         """
@@ -99,6 +100,8 @@ class NeuralNetwork:
         for i in range(epochs * len(training_set)):
             # Get a random training sample
             self.training_input_sample = random.choice(training_set)
+            # print(self.training_input_sample)
+            # TESTED WORKING
 
             # Update weights on each output neuron's input links
             label_count = 0
@@ -108,6 +111,8 @@ class NeuralNetwork:
 
                 # Get current neuron's predicted output
                 output = self.output(neuron)
+                # print(output)
+                # TESTED WORKING
 
                 # Get current neuron's expected output
                 label = self.training_input_sample[1][label_count]
@@ -140,6 +145,7 @@ class NeuralNetwork:
                     if output_neuron.layer != 2:
                         continue
                     output_derivative = self.__transfer_derivative(self.output(output_neuron))
+                    # output_derivative = self.output(output_neuron)
                     error = output_neuron.error
 
                     # Get weight from link between hidden neuron and output neuron
@@ -149,7 +155,7 @@ class NeuralNetwork:
                         weight = link.weight
 
                         # Increment hidden neuron's error
-                        neuron.error += weight * error * output_derivative
+                        neuron.error = neuron.error + weight * error * output_derivative
 
                 # Update the hidden neuron's input links' weights
                 for link in self.links:
@@ -171,6 +177,8 @@ class NeuralNetwork:
         self.data = None
         self.labels = None
         self.training_input_sample = None
+
+        # print("TRAINING SUCCESSFUL!!!")
 
         # raise NotImplementedError
 
@@ -197,7 +205,9 @@ class NeuralNetwork:
             for output_neuron in self.neurons:
                 if output_neuron.layer != 2:
                     continue
-                predictions.append(output_neuron)
+                predictions.append(self.output(output_neuron))
+
+            prediction_output_samples.append(predictions)
 
         self.data = None
         self.labels = None
@@ -229,10 +239,12 @@ class NeuralNetwork:
         if neuron.layer == 0:
             if self.labels is None:
                 # neuron.id corresponds to prediction sample's list index
+                # print(self.prediction_input_sample)
                 return self.prediction_input_sample[neuron.id]
 
             # neuron.id corresponds to training sample's list index
-            return self.training_input_sample[neuron.id]
+            # print(self.training_input_sample)
+            return self.training_input_sample[0][neuron.id]
 
         for link in self.links:
             # Move on if link is not in input links for the neuron
@@ -244,15 +256,16 @@ class NeuralNetwork:
 
             # Go through NNs neurons and find the neuron who is the link's input
             # Append that neuron's output to values
-            for neuron in self.neurons:
-                if neuron.id == link.input_neuron:
-                    values.append(self.output(neuron))
+            for neuron_in in self.neurons:
+                if neuron_in.id == link.input_neuron:
+                    # print("Got HERE")
+                    values.append(self.output(neuron_in))
 
         output = neuron.bias
         for (weight, value) in zip(weights, values):
             output += weight * value
 
-        return output
+        return self.activation(output)
 
         # raise NotImplementedError
 
@@ -278,6 +291,8 @@ class NeuralNetwork:
         for i in range(self.num_outputs):
             self.neurons.append(Neuron(2, self.bias))
 
+        # BUG: Neurons being added all with id set to 0
+
         # Populate links
 
         # For each neuron:
@@ -287,9 +302,12 @@ class NeuralNetwork:
 
         for i, neuron_in in enumerate(self.neurons):
             # Check if it has next layer
+            # print(neuron_in.layer)
+            # TESTED WORKS
             if neuron_in.layer == 2:
                 break
-            # If so, add links with this neuron's as input,
+
+            # If so, add links with this neuron as input,
             # for each of the next layer's node as output.
             for j, neuron_out in enumerate(self.neurons):
                 if neuron_out.id == neuron_in.id:
@@ -300,6 +318,8 @@ class NeuralNetwork:
 
                 # Append new link to links list
                 link = Link(neuron_in.id, neuron_out.id)
+                # print(str(link) + "LINK ADDED!!!")
+                # TEST PASSED
                 self.links.append(link)
 
                 # Add link id to input neuron's output links
@@ -314,6 +334,29 @@ class NeuralNetwork:
         Returns the transfer derivative for neuron's outputs
         """
         return output * (1.0 - output)
+
+    def print_nn(self):
+        """
+        Displays the weights of each neuron to neuron connection
+        """
+        print("\n\nNeural Network structure and weights:\n-------------------------------------\n")
+        for link in self.links:
+            # Print each connection
+
+            neuron_in = None
+            neuron_out = None
+            for neuron in self.neurons:
+                # find input neuron
+                if neuron.id == link.input_neuron:
+                    neuron_in = neuron
+                # find output neuron
+                if neuron.id == link.output_neuron:
+                    neuron_out = neuron
+
+            connection = f"LINK: Neuron IN --layer: {neuron_in.layer}   --id: {neuron_in.id}   *** Link WEIGHT: {link.weight}" \
+                         f" ***   Neuron OUT: --layer: {neuron_out.layer}   ---id: {neuron_out.id}"
+
+            print(connection)
 
 
 class Neuron:
@@ -335,7 +378,7 @@ class Neuron:
         self.output_links = []  # List of all links which go out of the neuron
 
         # Increment object count
-        self.count += 1
+        Neuron.count += 1
 
 
 class Link:
@@ -355,7 +398,7 @@ class Link:
         self.weight = random.uniform(0, 1)
 
         # increment object count
-        self.count += 1
+        Link.count += 1
 
 
 class Activation:
